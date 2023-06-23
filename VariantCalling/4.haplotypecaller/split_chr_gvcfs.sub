@@ -1,0 +1,43 @@
+#! /bin/bash -x 
+#SBATCH --job-name="modvcf"
+#SBATCH --cpus-per-task=3
+#SBATCH --mem=16G
+#SBATCH --output=/home/aiob/outerr/modvcf_%j.out
+#SBATCH --error=/home/aiob/outerr/modvcf_%j.err
+#
+#
+#######SPLIT CHROMOSOMES INSIDE A GVCF FILE#######
+#This script takes a single chromosome gvcf file and splits:
+#the chromosome id, col. 1 
+#the variant position, col. 2
+
+#module load samtools/1.9
+#this section of the script modifies per chromosome gvcfs
+
+for FILE in /scratch/125-emmer/avni_exomes_Svevo1ref_Alice/perChr_vcfs/redoing/*raw.g.vcf.gz
+do 
+	NAME=$(echo $FILE | cut -f 7 -d'/' | cut -f 1 -d'_')
+	CHR=$(echo $FILE | cut -f 6 -d'_' | cut -f 1 -d'_') #get chromosome name 
+#1. Select the header: print in new file all lines until the contig descriptor  
+	zcat ${NAME}_${CHR}_raw.g.vcf.gz | awk '1;/##INFO=<ID=ReadPosRankSum/{exit}' > ${NAME}_${CHR}_artChr_raw.g.vcf
+
+#2. append corrected contig list and assign the length of the chromosome to a variable 
+	cat Svevo1_artificialChr.List >> ${NAME}_${CHR}_artChr_raw.g.vcf
+	LEN=$(sed -n -e "s/##contig=<ID=${CHR}:400000001-//p" Svevo1_artificialChr.List | cut -f 1 -d ',')
+
+#3. append table header: look for #CHROM, print line, append to new vcf 
+	zcat ${NAME}_${CHR}_raw.g.vcf.gz | awk -v OFS='\t' '/#CHROM/{print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10}' >> ${NAME}_${CHR}_artChr_raw.g.vcf
+
+#4. change chromosome coordinates, variant positions and END= field accordingly
+#4.1: print everything that comes after the table header, if pos<=400Mbp change the chromosome coordinates and leave everything else unchanged; change only the END field in case it has a value bigger than 400Mb (likely in last row)
+	zcat ${NAME}_${CHR}_raw.g.vcf.gz | sed -n '/#CHROM/,$p' | awk '{if($2<=400000000)print}'| awk -v OFS='\t' -v chr="${CHR}" '{$1 = chr":1-400000000"; print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10}' |sed 's/END=4000[[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]]/END=400000000/g' >> ${NAME}_${CHR}_artChr_raw.g.vcf 
+#4.2: print everything that comes after the table header, if pos>=401Mbp change the chromosome coordinates, change the variant position and the END= field (i.e. substr($8, 5, 9)) as 'current position minus 400Mbp' 
+	zcat ${NAME}_${CHR}_raw.g.vcf.gz | sed -n '/#CHROM/,$p'| tail -n +2 | awk '{if($2>=400000001)print}' | awk -v OFS='\t' -v chr="${CHR}" -v len="${LEN}" '{$1 = chr":400000001-"len; $2 = $2 - 400000000; if(substr($8, 1, 4)=="END="){MOD=substr($8, 5, 9); MOD=MOD - 400000000; $8="END="MOD} else{$8=$8}; print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10}' >> ${NAME}_${CHR}_artChr_raw.g.vcf
+
+	bgzip ${NAME}_${CHR}_artChr_raw.g.vcf
+	#rm ${NAME}_${CHR}_artChr_raw.g.vcf
+	tabix ${NAME}_${CHR}_artChr_raw.g.vcf.gz	
+#srun java -Xmx16g -jar $PICARDPATH/picard.jar SortVcf I=${NAME}_${CHR}_artChr_raw.g.vcf O=${NAME}_${CHR}_artChr_sorted_raw.g.vcf
+done
+
+#module unload samtools/1.9

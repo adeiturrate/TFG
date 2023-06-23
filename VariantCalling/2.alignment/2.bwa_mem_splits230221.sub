@@ -1,0 +1,38 @@
+#!/bin/bash -x
+#
+#SBATCH --job-name="aln_mem"
+#SBATCH --partition=all
+#SBATCH --cpus-per-task=11
+#SBATCH --mem=48000
+#######
+
+########### ALIGN EACH SPLIT OF THE SAMPLE, CONVERT TO BAM FORMAT, SORT #############################
+# This script takes one split fastq (see split_fastq.sub) of one sample and runs bwa and 
+# samtools for one couple (forward and reverse) of splits #
+#
+# This script is called by split_bwa_aln.sh, where a job array is defined, having a number
+# of jobs equal to the number of splits for the sample of interest 
+#(i.e.for sample 1,  splitted in 10 small fastq (sample1.split0000.fq.gz to sample1.split0009.fq.gz)
+# This scripts aligns 1 split couple, as sample1.split0000 forward and reverse fastq  
+######################################################################################################
+
+SPLITS="/scratch/125-emmer/Ander/Splits"
+ALNS="/scratch/125-emmer/Ander/Splits_aln"
+PROJECT="/projects/125-emmer/Wang2022_emmer_fastq/Reference_Genome"
+# required modules
+module load bwa/0.7.16
+module load samtools/1.9
+
+# set input files to be processed
+in=$(sed -n "$SLURM_ARRAY_TASK_ID"p <(ls -1 $SPLITS/${1}_pair1.truncated*))
+inr=$(sed -n "$SLURM_ARRAY_TASK_ID"p <(ls -1 $SPLITS/${1}_pair2.truncated*))
+sampleID=$(echo ${in} | cut -f6 -d'/' | cut -f1 -d'_') #get sampleID 
+SPLIT=$(echo ${in} | cut -f3 -d'.' | cut -f4 -d'.' ) #I get the split number
+
+# run
+echo "bwa aligning ${in}, ${inr}"
+bwa mem -t 12 $PROJECT/Triticum_turgidum.Svevo.v1.dna_rm.genomic.fa ${in} ${inr} | samtools view -Shb -@ 11 - | samtools sort -o ${ALNS}/${sampleID}_${SPLIT}.sorted.pe-memDurum.bam -@ 12 - # ${in/.gz/.sorted.pe-mem.bam} - 
+echo "done"
+module unload bwa/0.7.16
+module unload samtools/1.9
+

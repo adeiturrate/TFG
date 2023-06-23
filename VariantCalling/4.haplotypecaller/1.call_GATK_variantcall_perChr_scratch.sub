@@ -1,0 +1,6 @@
+#! /bin/bash 
+
+# JOB ARRAY SUBMISSION FOR CALLING VARIANTS ON EACH CHROMOSOME OF A SAMPLE, SEPARATELY 
+# This script is submitted by script VCall1_AddRepGr_idx_call_Haplocall_scratch.sub
+
+sbatch --array 0-13 -o /home/adeiturrate/out/$1"_Vcall_perChr_%a.out" -e /home/adeiturrate/error/$1"_Vcall_perChr_%a.err" --export=ID=$1 /projects/125-emmer/Wang2022_emmer_fastq/Scripts/GATK_variantcall_perChr_scratch.sub 

@@ -1,0 +1,25 @@
+#!/bin/bash -x
+#
+#SBATCH --job-name="VCallHF"
+#SBATCH --partition=all
+#SBATCH --cpus-per-task=5
+#SBATCH --mem=70G
+#
+#cd /scratch/125-emmer/emmerGATK/perChrcall_test
+
+#NAME=$NAME
+module load gatk/4.1.6
+
+#ALNS=/projects/125-emmer/emmer_alns/Durum1ref
+cd /scratch/125-emmer/Ander/perChr_gvcfs
+REF=/projects/125-emmer/Wang2022_emmer_fastq/Reference_Genome/Triticum_turgidum.Svevo.v1.dna_rm.genomic.fa
+ALNS=/projects/125-emmer/Wang2022_emmer_fastq/Alignments
+CHR_LIST=($(<Chrlist.txt))
+CHR=${CHR_LIST[${SLURM_ARRAY_TASK_ID}]} #define the 14 elements of the array as the chromosomes
+# Run haplotype caller: -L = intervals; give all chromosomes for all genome analysis; -ERC GVCF is required to run hcaller on single sample; don't create index if chrs are > 512bp long; --pcr-indel-model NONE if samples were processed in pcr free experiments
+echo "running haplotype caller on single cromosomes per sample ${NAME}"
+gatk --java-options '-Xmx70g -Xms70g' HaplotypeCaller -R ${REF} -I ${ALNS}/${ID}.sorted.merged.pe-memDurum.nodupl.RG.bam -L $CHR -O ${ID}_${CHR}_raw.g.vcf.gz -ERC GVCF --create-output-variant-index FALSE
+
+
+module unload gatk/4.1.6
+

@@ -1,0 +1,64 @@
+#!/bin/bash -x
+#
+#SBATCH --job-name="VCall2"
+#SBATCH --partition=fatnodes
+#SBATCH --cpus-per-task=5
+#SBATCH --mem=128G    
+#SBATCH --output=/scratch/125-emmer/Ander/output/vcf%j.out
+#SBATCH --error=/scratch/125-emmer/Ander/error/vcf%j.err
+
+########################### GATK: GENOTYPE GVCFS, SELECT VARIANTS, HARDFILTER #############################
+# This script performs the GATK pipeline starting from individual per-chr gvcfs.
+# The final output is a global hardfiltered vcf, in which the new samples vcf is merged to an existing one.
+# Note that select variants and variantfiltration only indicate filtered variants 
+# as not PASS, but don't remove them from the output. If willing to remove them, use
+# SelectVariants --exclude-filtered true 
+# It's better to always specify the reference genome
+############################################################################################################
+
+module load gatk/4.1.6
+module load picard/2.22.3
+
+REF=/projects/125-emmer/Reference_genomes/Triticum_turgidum_Svevo.v1_genomic.artificial_chrom_split.fa
+cd /scratch/125-emmer/Ander/artificialCHR/
+#1. First combine all samples in one global (all samples) per chromosome gvcf
+#SAMPLES=/scratch/125-emmer/emmerGATK/artificialCHR/emmer_${CHR}_gvcfs.list
+
+#for CHR in 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+#do
+#	java -Xmx128g -jar $PICARDPATH/picard.jar MergeVcfs I=all_emmer_outgroup_${CHR}.raw.vcf.gz  I=all_emmer_wang_${CHR}_artChr_raw.vcf.gz O=all_emmer_wgs_${CHR}.raw.vcf.gz
+#	echo "single chromosome $CHR vcfs merged"
+#done
+
+#3. Gather per-chr vcfs
+#java -Xmx128g -jar $PICARDPATH/picard.jar GatherVcfs I=all_emmer_wgs_1.raw.vcf.gz I=all_emmer_wgs_2.raw.vcf.gz I=all_emmer_wgs_3.raw.vcf.gz I=all_emmer_wgs_4.raw.vcf.gz I=all_emmer_wgs_5.raw.vcf.gz I=all_emmer_wgs_6.raw.vcf.gz I=all_emmer_wgs_7.raw.vcf.gz I=all_emmer_wgs_8.raw.vcf.gz I=all_emmer_wgs_9.raw.vcf.gz I=all_emmer_wgs_10.raw.vcf.gz I=all_emmer_wgs_11.raw.vcf.gz I=all_emmer_wgs_12.raw.vcf.gz I=all_emmer_wgs_13.raw.vcf.gz I=all_emmer_wgs_14.raw.vcf.gz O=all_emmer_wgs_artChr_raw.vcf.gz
+tabix all_emmer_wang_artChr_raw.vcf.gz
+echo 'whole genome all samples vcf created'
+
+#4. Select biallelic SNPs only 
+gatk SelectVariants -R ${REF} -V all_emmer_wang_artChr_raw.vcf.gz -select-type SNP --restrict-alleles-to BIALLELIC -O all_emmer_wang_artChr.biallSNPs.raw.vcf.gz
+tabix all_emmer_wang_artChr.biallSNPs.raw.vcf.gz
+echo 'bialleic SNPs selected'
+
+#5. variantfiltration using JEXL expressions
+echo 'hard filtering SNPs'
+gatk VariantFiltration -R ${REF} -V all_emmer_wang_artChr.biallSNPs.raw.vcf.gz -O all_emmer_wang_artChr.biallSNPs.hardfilt.vcf.gz --filter-name "qual/depth" --filter-expression "QD < 2.000" --filter-name "Fisher" --filter-expression "FS > 60.000" --filter-name "SOR" --filter-expression "SOR > 3.000" --filter-name "RMS-MQUAL" --filter-expression "MQ < 30.000"
+echo 'hard-filters applied'
+tabix all_emmer_wang_artChr.biallSNPs.hardfilt.vcf.gz
+
+#6. apply futher filtering and remove outilers --remove-indv B080DEW --remove-indv B032WEW
+vcftools --gzvcf all_emmer_wang_artChr.biallSNPs.hardfilt.vcf.gz --max-missing 0.9  --remove-filtered-all --recode --recode-INFO-all --stdout | bgzip > all_emmer_wang_artChr.biallSNPs.hardfiltPASS.vcf.gz 
+tabix all_emmer_wang_artChr.biallSNPs.hardfiltPASS.vcf.gz
+echo 'hard-filtered dataset created'
+
+#7. identify singletons and remove them
+vcftools --gzvcf all_emmer_wang_artChr.biallSNPs.hardfiltPASS.vcf.gz --singletons --out all_emmer_wang_artChr.biallSNPs.hardfiltPASS
+sed '1d' all_emmer_wang_artChr.biallSNPs.hardfiltPASS.singletons | cut -f1,2 > all_emmer_wang_artChr.biallSNPs.hardfiltPASS.singletons.list
+vcftools --gzvcf all_emmer_wang_artChr.biallSNPs.hardfiltPASS.vcf.gz --exclude-positions all_emmer_wang_artChr.biallSNPs.hardfiltPASS.singletons.list --remove-filtered-all --recode --recode-INFO-all --stdout | bgzip > all_emmer_wang_artChr.biallSNPs.hardfiltPASS.NoSin.vcf.gz
+tabix all_emmer_wang_artChr.biallSNPs.hardfiltPASS.NoSin.vcf.gz
+echo 'singletons removed'
+
+##NEXT: restore natural chromsomes and filter for LD. 
+
+module unload gatk/4.1.6
+module unload picard/2.22.3

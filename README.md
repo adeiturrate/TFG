@@ -8,7 +8,7 @@ Scripts are inside Variant Calling Folders. Inside this folder scripts are divid
 <br>
 <h1> Population Structure Analysis </h1>
 <br> 
-Scripts are inside Variant Calling Folders. Inside this folder scripts are divided by numbers doing reference to the steps to follow. 
+Inside the Population Structure Analysis directory, there are two subdirectories: one for PCA and DAPC and the other one for MSMC. Inside these directories scripts are divided by numbers doing reference to the steps to follow. 
 <br>
 <h1>Selection Analysis </h1>
 <br>

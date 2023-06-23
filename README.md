@@ -15,4 +15,4 @@ Scripts are inside Variant Calling Folders. Inside this folder scripts are divid
 Scripts are inside Variant Calling Folders. Inside this folder scripts are divided by numbers doing reference to the steps to follow. 
 <be>
 <br>
-Many of the commands used for this analysis were computed using bcftools for Samtools so they were directly written in the terminal
+Commands used for this analysis were computed using bcftools for Samtools so they were directly written in the terminal

@@ -1,0 +1,45 @@
+#! /bin/bash
+#
+#SBATCH --job-name="plink"
+#SBATCH --partition=all
+#SBATCH --cpus-per-task=3
+#SBATCH --mem=16G
+#SBATCH --output=/scratch/125-emmer/Ander/output/modvcf_%j.out
+#SBATCH --error=/scratch/125-emmer/Ander/error/modvcf_%j.err
+
+#mkdir /scratch/125-emmer/emmerGATK/emmer_plink
+#cd /scratch/125-emmer/emmer_plink/
+
+module load plink/1.9
+module load samtools/1.9
+module load picard/2.22.3
+####### PERFORM PCA #######
+# this scripts performs a PCA starting from a vcf file. First, LD pruning is performed, and then PCA is made. Since we are not working on human data, some specifications are needed. double id is needed to duplicate the ids of the samples (otherwise plink expects pedigree info), allow-extra-chr is required to allow for a set of chromosomes that is not the human 22 + xy; --geno 0.1 include only SNPs with a 90% genotyping rate (10% missing); --set-missing-var-ids @:# set variant id to chr:pos , otherwise plink expects annotations; --indep-pairwise performs linkage pruning, and the variables arguments re, in order: window-size(kbp), step (bp), r^2 threshold. --make-bed used to output a bed file for ADMIXTURE.
+# The arguments to be specified are $DIR = working directory, $VCF = input vcf, $rsqr = value of r^2 for the analysis and $BNAME = base name for output file. 
+# before performing this step remeber to change the chromosomes in the input vcf to simple integers, otherwise ADMIXTURE will not accept the bed input 
+#vcftools --gzvcf ./nooutliers1021/emmer_nooutl_maxmis09_LDfiltered01.vcf.gz --keep ../samples_lists/wild_samples_nooutl.list --recode --stdout | gzip -c > emmer_nooutl_maxmis09_LDfiltered01.wildonly.vcf.gz
+rsqr=0.1
+cd /scratch/125-emmer/Ander/artificialCHR
+
+#bcftools view -g ^het /projects/125-emmer/outgroup/all_emmer_outgroup.biallSNPs.hardfiltPASS_maxmis09_sitescorrect_NATChr.rename.vcf.gz | bgzip -c > /scratch/125-emmer/Ander/artificialCHR/all_emmer_outgroup.biallSNPs.hardfiltPASS_maxmis09_sitescorrect_NATChr.rename.NOhetpositions.vcf.gz
+#tabix -f -C /scratch/125-emmer/Ander/artificialCHR/all_emmer_outgroup.biallSNPs.hardfiltPASS_maxmis09_sitescorrect_NATChr.rename.NOhetpositions.vcf.gz
+
+vcftools --gzvcf all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.infocorrect.vcf.gz  --max-missing 0.9 --remove-indv OUTGROUP  --remove-indv WSYR1 --remove-indv WSYR10 --remove-indv WSYR11 --remove-indv WSYR12 --remove-indv WISR2 --remove-indv WISR3 --remove-indv WISR25 --remove-indv WISR26 --remove-indv WISR27 --remove-indv WISR28 --remove-indv WISR29  --remove-indv WISR30 --remove-indv WISR31 --remove-indv WISR32 --remove-indv WISR33 --remove-indv WISR34 --remove-indv WISR35 --remove-indv WISR36 --remove-indv WISR37 --recode --recode-INFO-all --stdout | bgzip > all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.vcf.gz
+#LD filtering + PCA 
+
+#bcftools merge all_emmer_wang_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.vcf.gz all_emmer_outgroup.biallSNPs.hardfiltPASS_maxmis09_sitescorrect_NATChr.rename.NOhetpositions.vcf.gz -Oz -o all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.infocorrect.vcf.gz 
+
+#vcftools --gzvcf all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.infocorrect.vcf.gz  --max-missing 0.9 --remove-indv OUTGROUP --remove-indv WISR26 --remove-indv WISR27 --remove-indv WISR28 --remove-indv WISR29 --recode --recode-INFO-all --stdout | bgzip >  all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.vcf.gz
+plink --vcf all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.vcf.gz  --double-id --chr-set 14 no-xy --geno 0.1 --set-missing-var-ids @:# --indep-pairwise 50 10 ${rsqr} --out all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr} 
+plink --vcf all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.vcf.gz --double-id --chr-set 14 no-xy --geno 0.1 --set-missing-var-ids @:# --extract all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr}.prune.in --make-bed --pca 'header' 'tabs' --out all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr}
+
+
+sed 's/:/\t/g' all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr}.prune.in > all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr}.prune.tabsep.in
+vcftools --gzvcf all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.vcf.gz --positions all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr}.prune.tabsep.in --recode --recode-INFO-all --stdout | bgzip >all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr}.vcf.gz
+tabix -C all_emmer_wgs_NATChr.biallSNPs.hardfiltPASS.NoSin.NOhetpositions.NoOutgroup.infocorrect.90.noidenticals.LDfilt${rsqr}.vcf.gz
+
+
+module unload plink/1.9
+module unload samtools/1.9
+module unload picard/2.22.3
+#--allow-extra-chr
